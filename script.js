@@ -1,289 +1,367 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Contract details from Pure Landscape and Carpentry contract
-    const contractDetails = {
-        totalCost: 226546.48,
-        client: "Joe Chen",
-        contractor: "Pure Landscape and Carpentry Pty Ltd",
-        address: "20 Buckra Avenue, Turramurra NSW 2074",
-        contractDate: "22.08.25",
-        startDate: new Date('2025-08-27'),
-        estimatedDuration: 8 // weeks as per contract
-    };
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Payment stages from the contract
-    const paymentStages = [
-        {
-            id: 1,
-            name: "Preparation/Footings/Common Brick Walls/Front Fence",
-            amount: 46145.00,
-            completed: false,
-            description: "Site preparation, footings, and initial infrastructure"
-        },
-        {
-            id: 2,
-            name: "Pine Walls/Boundary Fence/Waterproofing/Ag-lines/Concrete",
-            amount: 42102.50,
-            completed: false,
-            description: "Structural works and waterproofing systems"
-        },
-        {
-            id: 3,
-            name: "Render/Pier Caps/Steel Edging/Stepping Stones/Climber Support/Driveway/Soil Works",
-            amount: 33676.50,
-            completed: false,
-            description: "Finishing works and landscaping preparation"
-        },
-        {
-            id: 4,
-            name: "Colored Concrete/Rough Pour Driveway/Paint Timber/Council Crossover",
-            amount: 30226.73,
-            completed: false,
-            description: "Concrete works and external finishes"
-        },
-        {
-            id: 5,
-            name: "Plants",
-            amount: 32374.65,
-            completed: false,
-            description: "Plant installation and landscaping"
-        },
-        {
-            id: 6,
-            name: "Irrigation/Mulch/Turf/Clean Up/Side Security Gates",
-            amount: 42021.10,
-            completed: false,
-            description: "Final irrigation, turf installation and project completion"
+// --- Global Variables ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const correctPassword = '1314';
+
+// Initialize Firebase services
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// --- State Variables ---
+let isAuthenticated = false;
+let userId = '';
+let projectData = null;
+let notes = [];
+let payments = [];
+let provisionalSums = [];
+let primeCosts = [];
+let excludedItems = [];
+
+// --- Helper function to format currency ---
+const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-AU', {
+        style: 'currency',
+        currency: 'AUD',
+        minimumFractionDigits: 2
+    }).format(amount);
+};
+
+// --- Authentication and Data Fetching ---
+const handleLogin = async (password) => {
+    if (password === correctPassword) {
+        try {
+            await signInAnonymously(auth);
+        } catch (error) {
+            renderMessage(`Error logging in: ${error.message}`, 'text-red-500');
         }
-    ];
-
-    let currentSpend = 0;
-    let additionalCosts = 0;
-    
-    const timeline = document.getElementById('timeline');
-    const notesList = document.getElementById('notes-list');
-    const noteInput = document.getElementById('note-input');
-    const addNoteBtn = document.getElementById('add-note-btn');
-    const loginForm = document.getElementById('login-form');
-    const loginSection = document.getElementById('login-section');
-    const dashboardSection = document.getElementById('dashboard');
-    const stagesSection = document.getElementById('stages-section');
-    const timelineSection = document.getElementById('timeline-section');
-    const notesSection = document.getElementById('notes-section');
-    
-    // Function to update dashboard
-    function updateDashboard() {
-        const totalProjectCost = contractDetails.totalCost + additionalCosts;
-        const remainingCost = totalProjectCost - currentSpend;
-        
-        // Update totals
-        document.getElementById('total-cost').textContent = `A$${totalProjectCost.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        document.getElementById('current-spend').textContent = `A$${currentSpend.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        document.getElementById('remaining-cost').textContent = `A$${remainingCost.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        
-        // Update progress bar
-        const progress = (currentSpend / totalProjectCost) * 100;
-        document.getElementById('project-progress').style.width = `${Math.min(progress, 100)}%`;
-        document.getElementById('progress-text').textContent = `${Math.min(progress, 100).toFixed(1)}% Complete`;
-        
-        // Update completed stages count
-        const completedStages = paymentStages.filter(stage => stage.completed).length;
-        const completedStagesElement = document.getElementById('completed-stages');
-        if (completedStagesElement) {
-            completedStagesElement.textContent = `${completedStages}/${paymentStages.length} Payment Stages Complete`;
-        }
+    } else {
+        renderMessage('Incorrect password. Please try again.', 'text-red-500');
     }
+};
 
-    // Function to create detailed stages list
-    function createStagesList() {
-        const stagesList = document.getElementById('stages-list');
-        if (!stagesList) return;
-        
-        stagesList.innerHTML = '';
-        
-        paymentStages.forEach((stage) => {
-            const listItem = document.createElement('li');
-            listItem.innerHTML = `
-                <div class="stage-item">
-                    <label class="stage-header">
-                        <input type="checkbox" data-stage-id="${stage.id}" ${stage.completed ? 'checked' : ''}>
-                        <strong>Stage ${stage.id}: ${stage.name}</strong>
-                        <span class="stage-amount">A$${stage.amount.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                    </label>
-                    <p class="stage-description">${stage.description}</p>
-                </div>
-            `;
-            stagesList.appendChild(listItem);
-        });
-        
-        // Add event listeners to the newly created checkboxes
-        const stageCheckboxes = stagesList.querySelectorAll('input[type="checkbox"]');
-        stageCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', handleStageCompletion);
-        });
+const handleLogout = async () => {
+    try {
+        await signOut(auth);
+        isAuthenticated = false;
+        userId = '';
+        renderApp();
+        renderMessage('Logged out successfully!', 'text-green-500');
+    } catch (error) {
+        renderMessage(`Error logging out: ${error.message}`, 'text-red-500');
     }
+};
 
-    // Function to add a note
-    function addNote(noteText, isCostUpdate = false, costChange = 0, isStageCompletion = false, stageName = '') {
-        if (!notesList) return;
-        
-        const noteDiv = document.createElement('div');
-        noteDiv.classList.add('note');
-        
-        let displayNote = noteText;
-        let noteClass = '';
-        
-        if (isCostUpdate) {
-            displayNote = `Cost Update: ${noteText}`;
-            additionalCosts += costChange;
-            noteClass = 'cost-update';
-            updateDashboard();
-        } else if (isStageCompletion) {
-            displayNote = `Stage Completed: ${stageName}`;
-            noteClass = 'stage-completion';
-        }
-
-        noteDiv.innerHTML = `
-            <div class="note-content ${noteClass}">
-                <p>${displayNote}</p>
-                <small>${new Date().toLocaleString('en-AU')}</small>
-            </div>
-        `;
-        notesList.insertBefore(noteDiv, notesList.firstChild);
-        if (noteInput) noteInput.value = '';
+// Listen for authentication state changes
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        isAuthenticated = true;
+        userId = user.uid;
+        setupFirestoreListeners();
+    } else {
+        isAuthenticated = false;
     }
-
-    // Function to handle stage completion
-    function handleStageCompletion(event) {
-        const stageId = parseInt(event.target.dataset.stageId);
-        const stage = paymentStages.find(s => s.id === stageId);
-        
-        if (!stage || !timeline) return;
-        
-        const now = new Date();
-        const timelineEvent = document.createElement('div');
-        timelineEvent.classList.add('timeline-event');
-        
-        if (event.target.checked) {
-            // Stage completed
-            stage.completed = true;
-            currentSpend += stage.amount;
-            
-            timelineEvent.innerHTML = `
-                <div class="timeline-content completed">
-                    <p><strong>Payment Stage ${stage.id} Completed</strong></p>
-                    <p>${stage.name}</p>
-                    <p class="amount">Amount: A$${stage.amount.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                    <small>${now.toLocaleDateString('en-AU')} at ${now.toLocaleTimeString('en-AU')}</small>
-                </div>
-            `;
-            
-            addNote(`Stage ${stage.id} completed: ${stage.name} - A$${stage.amount.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, false, 0, true, stage.name);
-        } else {
-            // Stage uncompleted
-            stage.completed = false;
-            currentSpend -= stage.amount;
-            
-            timelineEvent.innerHTML = `
-                <div class="timeline-content uncompleted">
-                    <p><strong>Payment Stage ${stage.id} Marked Incomplete</strong></p>
-                    <p>${stage.name}</p>
-                    <p class="amount">Amount: A$${stage.amount.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                    <small>${now.toLocaleDateString('en-AU')} at ${now.toLocaleTimeString('en-AU')}</small>
-                </div>
-            `;
-        }
-        
-        timeline.insertBefore(timelineEvent, timeline.firstChild);
-        updateDashboard();
-    }
-    
-    // Function to generate initial timeline
-    function generateTimeline() {
-        if (!timeline) return;
-        
-        const timelineStart = document.createElement('div');
-        timelineStart.classList.add('timeline-event');
-        timelineStart.innerHTML = `
-            <div class="timeline-content project-start">
-                <p><strong>Project Contract Signed</strong></p>
-                <p>Pure Landscape and Carpentry Pty Ltd</p>
-                <p>Client: ${contractDetails.client}</p>
-                <p>Total Contract Value: A$${contractDetails.totalCost.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                <small>${contractDetails.startDate.toLocaleDateString('en-AU')}</small>
-            </div>
-        `;
-        timeline.appendChild(timelineStart);
-        
-        // Add estimated completion date
-        const estimatedEnd = new Date(contractDetails.startDate);
-        estimatedEnd.setDate(estimatedEnd.getDate() + (contractDetails.estimatedDuration * 7)); // Convert weeks to days
-        
-        const timelineEnd = document.createElement('div');
-        timelineEnd.classList.add('timeline-event');
-        timelineEnd.innerHTML = `
-            <div class="timeline-content estimated">
-                <p><strong>Estimated Project Completion</strong></p>
-                <p>Based on ${contractDetails.estimatedDuration} week contract duration</p>
-                <small>Target: ${estimatedEnd.toLocaleDateString('en-AU')}</small>
-            </div>
-        `;
-        timeline.appendChild(timelineEnd);
-    }
-
-    // Function to parse cost updates from notes
-    function parseCostUpdate(noteText) {
-        const costRegex = /(?:cost update|additional cost|extra cost|variation):?\s*[A$]*\s*([\d,]+\.?\d*)/i;
-        const match = noteText.match(costRegex);
-        if (match) {
-            return parseFloat(match[1].replace(/,/g, ''));
-        }
-        return null;
-    }
-
-    // Event Listeners
-    if (addNoteBtn && noteInput) {
-        addNoteBtn.addEventListener('click', () => {
-            const noteText = noteInput.value.trim();
-            if (noteText) {
-                const costChange = parseCostUpdate(noteText);
-                if (costChange) {
-                    addNote(noteText, true, costChange);
-                } else {
-                    addNote(noteText);
-                }
-            }
-        });
-
-        // Allow Enter key to add notes
-        noteInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                addNoteBtn.click();
-            }
-        });
-    }
-
-    if (loginForm) {
-        loginForm.addEventListener('submit', (event) => {
-            event.preventDefault();
-            
-            // Show all sections
-            if (loginSection) loginSection.style.display = 'none';
-            if (dashboardSection) dashboardSection.style.display = 'block';
-            if (stagesSection) stagesSection.style.display = 'block';
-            if (timelineSection) timelineSection.style.display = 'block';
-            if (notesSection) notesSection.style.display = 'block';
-            
-            // Initialize the tracker
-            createStagesList();
-            updateDashboard();
-            generateTimeline();
-            
-            // Add welcome note
-            addNote(`Project tracker initialized for ${contractDetails.client} - ${contractDetails.address}`);
-        });
-    }
-
-    // Initialize dashboard on page load (hidden)
-    updateDashboard();
+    renderApp();
 });
+
+// Setup real-time listeners for Firestore data
+const setupFirestoreListeners = () => {
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    const paymentsRef = collection(db, 'artifacts', appId, 'users', userId, 'payments');
+
+    // Listener for main project data
+    onSnapshot(projectDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            projectData = docSnap.data();
+            notes = projectData.notes || [];
+            provisionalSums = projectData.provisionalSums || [];
+            primeCosts = projectData.primeCosts || [];
+            excludedItems = projectData.excludedItems || [];
+            renderApp();
+        } else {
+            setupInitialData();
+        }
+    }, (error) => {
+        console.error("Error fetching Firestore data:", error);
+        renderMessage("Failed to load project data. Please try again.", 'text-red-500');
+    });
+
+    // Listener for payments collection
+    onSnapshot(paymentsRef, (snapshot) => {
+        payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        payments.sort((a, b) => new Date(a.date) - new Date(b.date));
+        renderApp();
+    }, (error) => {
+        console.error("Error fetching payments:", error);
+    });
+};
+
+const setupInitialData = async () => {
+    const initialData = {
+        totalCost: 226546.48,
+        currentSpend: 0,
+        stages: {
+            "Hardworks": false,
+            "Softworks": false,
+            "Variations": false,
+            "Final Completion": false,
+        },
+        notes: [],
+        unexpectedCosts: [],
+        provisionalSums: [
+            { description: "Electrical Works", estimated: 7500, actual: null, checked: false },
+            { description: "Plumbing Works", estimated: 4500, actual: null, checked: false },
+            { description: "Excavation and Site Preparation", estimated: 12000, actual: null, checked: false },
+            { description: "Fencing", estimated: 8000, actual: null, checked: false },
+            { description: "Tiling and Paving", estimated: 15000, actual: null, checked: false },
+            { description: "Lighting Fixtures", estimated: 2500, actual: null, checked: false },
+            { description: "Water Features", estimated: 5000, actual: null, checked: false },
+            { description: "Timber Decking", estimated: 9000, actual: null, checked: false },
+        ],
+        primeCosts: [
+            { description: "Retaining Wall", allowance: 10000, actual: null, checked: false },
+            { description: "Pool", allowance: 50000, actual: null, checked: false },
+            { description: "Pergola", allowance: 6000, actual: null, checked: false },
+            { description: "Outdoor Kitchen", allowance: 12000, actual: null, checked: false },
+            { description: "Irrigation System", allowance: 3000, actual: null, checked: false },
+            { description: "Garden Shed/Storage", allowance: 2500, actual: null, checked: false},
+            { description: "Patio Furniture/Outdoor Seating", allowance: 4000, actual: null, checked: false},
+        ],
+        excludedItems: [],
+    };
+    try {
+        const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+        await setDoc(projectDocRef, initialData, { merge: true });
+        console.log("Initial data set for new user.");
+    } catch (error) {
+        console.error("Error setting initial data:", error);
+    }
+};
+
+// --- DOM Rendering Functions ---
+const renderApp = () => {
+    const appContainer = document.getElementById('app');
+    if (!appContainer) return;
+
+    if (!isAuthenticated) {
+        appContainer.innerHTML = `
+            <div class="min-h-screen flex items-center justify-center p-4">
+                <div class="bg-white p-8 rounded-lg shadow-lg max-w-sm w-full">
+                    <h2 class="text-2xl font-bold mb-4 text-center text-gray-800">Enter Project Password</h2>
+                    <p id="message" class="text-center text-sm text-red-500 h-6"></p>
+                    <form id="login-form">
+                        <input
+                            type="password"
+                            id="password-input"
+                            placeholder="Password"
+                            class="w-full p-2 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            required
+                        />
+                        <button
+                            type="submit"
+                            class="w-full bg-blue-500 text-white p-2 rounded-md font-semibold hover:bg-blue-600 transition-colors"
+                        >
+                            Log In
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const password = document.getElementById('password-input').value;
+            handleLogin(password);
+        });
+    } else {
+        // Main dashboard
+        appContainer.innerHTML = `
+            <header class="bg-white p-6 rounded-lg shadow-md mb-4 flex flex-col md:flex-row justify-between items-center">
+                <h1 class="text-2xl font-bold text-blue-600">Landscaping Tracker</h1>
+                <div class="flex items-center space-x-4 mt-4 md:mt-0">
+                    <p class="text-sm text-gray-600 hidden md:block">User ID: <span class="font-mono text-xs">${userId}</span></p>
+                    <button id="logout-btn" class="bg-red-500 text-white text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors">Log Out</button>
+                </div>
+            </header>
+            <main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${renderSummaryCard()}
+                ${renderStagesCard()}
+                ${renderTimelineCard()}
+                ${renderProvisionalSumsCard()}
+                ${renderPrimeCostsCard()}
+                ${renderPaymentTrackerCard()}
+                ${renderUnexpectedCostsCard()}
+                ${renderNotesSection()}
+                ${renderExcludedItemsSection()}
+            </main>
+        `;
+        // Attach event listeners after rendering
+        document.getElementById('logout-btn').addEventListener('click', handleLogout);
+        setupEventListeners();
+    }
+};
+
+const renderMessage = (text, className) => {
+    const messageEl = document.getElementById('message');
+    if (messageEl) {
+        messageEl.textContent = text;
+        messageEl.className = `text-center text-sm ${className} h-6`;
+    }
+};
+
+// ... (other rendering functions like renderSummaryCard, renderStagesCard, etc.) ...
+
+const setupEventListeners = () => {
+    // Event listener for project stages
+    document.querySelectorAll('.stage-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            handleStageChange(e.target.dataset.stage);
+        });
+    });
+
+    // Event listener for adding notes
+    document.getElementById('note-form')?.addEventListener('submit', handleAddNote);
+    
+    // Event listener for adding excluded items
+    document.getElementById('excluded-item-form')?.addEventListener('submit', handleAddExcludedItem);
+
+    // Event listener for provisional sums checkboxes
+    document.querySelectorAll('.provisional-sum-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            handleProvisionalSumChange(parseInt(e.target.dataset.index, 10));
+        });
+    });
+    
+    // Event listener for prime costs checkboxes
+    document.querySelectorAll('.prime-cost-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            handlePrimeCostChange(parseInt(e.target.dataset.index, 10));
+        });
+    });
+
+    // Event listener for adding payments
+    document.getElementById('payment-form')?.addEventListener('submit', handleAddPayment);
+
+    // Event listener for adding unexpected costs
+    document.getElementById('unexpected-cost-form')?.addEventListener('submit', handleAddUnexpectedCost);
+};
+
+// --- Data Management Functions ---
+const handleStageChange = async (stage) => {
+    if (!projectData || !userId) return;
+    const newStages = { ...projectData.stages, [stage]: !projectData.stages[stage] };
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { stages: newStages });
+    } catch (error) {
+        console.error("Error updating stage:", error);
+    }
+};
+
+const handleAddNote = async (e) => {
+    e.preventDefault();
+    const noteInput = document.getElementById('note-input');
+    if (!noteInput.value || !userId || !projectData) return;
+    const newNotes = [...projectData.notes, {
+        text: noteInput.value,
+        timestamp: new Date().toISOString(),
+    }];
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { notes: newNotes });
+        noteInput.value = '';
+    } catch (error) {
+        console.error("Error adding note:", error);
+    }
+};
+
+const handleAddExcludedItem = async (e) => {
+    e.preventDefault();
+    const excludedItemInput = document.getElementById('excluded-item-input');
+    if (!excludedItemInput.value || !userId || !projectData) return;
+    const updatedItems = [...excludedItems, {
+        description: excludedItemInput.value,
+        checked: false,
+    }];
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { excludedItems: updatedItems });
+        excludedItemInput.value = '';
+    } catch (error) {
+        console.error("Error adding excluded item:", error);
+    }
+};
+
+const handleProvisionalSumChange = async (index) => {
+    if (!projectData || !userId) return;
+    const updatedSums = [...provisionalSums];
+    updatedSums[index].checked = !updatedSums[index].checked;
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { provisionalSums: updatedSums });
+    } catch (error) {
+        console.error("Error updating provisional sum:", error);
+    }
+};
+
+const handlePrimeCostChange = async (index) => {
+    if (!projectData || !userId) return;
+    const updatedCosts = [...primeCosts];
+    updatedCosts[index].checked = !updatedCosts[index].checked;
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { primeCosts: updatedCosts });
+    } catch (error) {
+        console.error("Error updating prime cost:", error);
+    }
+};
+
+const handleAddPayment = async (e) => {
+    e.preventDefault();
+    const amountInput = document.getElementById('payment-amount-input');
+    const dateInput = document.getElementById('payment-date-input');
+    if (!amountInput.value || !dateInput.value || !userId || !projectData) return;
+    const amount = parseFloat(amountInput.value);
+    if (isNaN(amount)) {
+        renderMessage("Please enter a valid amount.", 'text-red-500');
+        return;
+    }
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    const paymentsRef = collection(db, 'artifacts', appId, 'users', userId, 'payments');
+    const newCurrentSpend = parseFloat((projectData.currentSpend + amount).toFixed(2));
+    const newPayment = { amount: amount, date: dateInput.value, timestamp: new Date().toISOString() };
+    try {
+        await updateDoc(projectDocRef, { currentSpend: newCurrentSpend });
+        await addDoc(paymentsRef, newPayment);
+        amountInput.value = '';
+        dateInput.value = '';
+    } catch (error) {
+        console.error("Error adding payment:", error);
+    }
+};
+
+const handleAddUnexpectedCost = async (e) => {
+    e.preventDefault();
+    const costInput = document.getElementById('unexpected-cost-input');
+    if (!costInput.value || !userId || !projectData) return;
+    const amount = parseFloat(costInput.value);
+    if (isNaN(amount)) {
+        renderMessage("Please enter a valid amount for unexpected cost.", 'text-red-500');
+        return;
+    }
+    const newUnexpectedCosts = [...projectData.unexpectedCosts, { amount: amount, timestamp: new Date().toISOString() }];
+    const newCurrentSpend = parseFloat((projectData.currentSpend + amount).toFixed(2));
+    const projectDocRef = doc(db, 'artifacts', appId, 'users', userId, 'projectData', 'main');
+    try {
+        await updateDoc(projectDocRef, { unexpectedCosts: newUnexpectedCosts, currentSpend: newCurrentSpend });
+        costInput.value = '';
+    } catch (error) {
+        console.error("Error adding unexpected cost:", error);
+    }
+};
+
+// Initial render
+window.onload = renderApp;
