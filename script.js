@@ -56,13 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     ];
 
-    // Additional contract items
-    const additionalItems = {
-        provisionalSums: 63310.50,
-        primeCostItems: 163235.98,
-        marginRate: 0.10 // 10% margin as specified in contract
-    };
-
     let currentSpend = 0;
     let additionalCosts = 0;
     
@@ -82,25 +75,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalProjectCost = contractDetails.totalCost + additionalCosts;
         const remainingCost = totalProjectCost - currentSpend;
         
+        // Update totals
         document.getElementById('total-cost').textContent = `A$${totalProjectCost.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('current-spend').textContent = `A$${currentSpend.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('remaining-cost').textContent = `A$${remainingCost.toLocaleString('en-AU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         
+        // Update progress bar
         const progress = (currentSpend / totalProjectCost) * 100;
         document.getElementById('project-progress').style.width = `${Math.min(progress, 100)}%`;
         document.getElementById('progress-text').textContent = `${Math.min(progress, 100).toFixed(1)}% Complete`;
         
         // Update completed stages count
         const completedStages = paymentStages.filter(stage => stage.completed).length;
-        document.getElementById('completed-stages').textContent = `${completedStages}/${paymentStages.length} Payment Stages Complete`;
+        const completedStagesElement = document.getElementById('completed-stages');
+        if (completedStagesElement) {
+            completedStagesElement.textContent = `${completedStages}/${paymentStages.length} Payment Stages Complete`;
+        }
     }
 
     // Function to create detailed stages list
     function createStagesList() {
         const stagesList = document.getElementById('stages-list');
+        if (!stagesList) return;
+        
         stagesList.innerHTML = '';
         
-        paymentStages.forEach((stage, index) => {
+        paymentStages.forEach((stage) => {
             const listItem = document.createElement('li');
             listItem.innerHTML = `
                 <div class="stage-item">
@@ -114,10 +114,18 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             stagesList.appendChild(listItem);
         });
+        
+        // Add event listeners to the newly created checkboxes
+        const stageCheckboxes = stagesList.querySelectorAll('input[type="checkbox"]');
+        stageCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', handleStageCompletion);
+        });
     }
 
     // Function to add a note
     function addNote(noteText, isCostUpdate = false, costChange = 0, isStageCompletion = false, stageName = '') {
+        if (!notesList) return;
+        
         const noteDiv = document.createElement('div');
         noteDiv.classList.add('note');
         
@@ -125,12 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
         let noteClass = '';
         
         if (isCostUpdate) {
-            displayNote = `💰 Cost Update: ${noteText}`;
+            displayNote = `Cost Update: ${noteText}`;
             additionalCosts += costChange;
             noteClass = 'cost-update';
             updateDashboard();
         } else if (isStageCompletion) {
-            displayNote = `✅ Stage Completed: ${stageName}`;
+            displayNote = `Stage Completed: ${stageName}`;
             noteClass = 'stage-completion';
         }
 
@@ -141,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         notesList.insertBefore(noteDiv, notesList.firstChild);
-        noteInput.value = '';
+        if (noteInput) noteInput.value = '';
     }
 
     // Function to handle stage completion
@@ -149,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const stageId = parseInt(event.target.dataset.stageId);
         const stage = paymentStages.find(s => s.id === stageId);
         
-        if (!stage) return;
+        if (!stage || !timeline) return;
         
         const now = new Date();
         const timelineEvent = document.createElement('div');
@@ -191,6 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Function to generate initial timeline
     function generateTimeline() {
+        if (!timeline) return;
+        
         const timelineStart = document.createElement('div');
         timelineStart.classList.add('timeline-event');
         timelineStart.innerHTML = `
@@ -231,50 +241,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Event Listeners
-    addNoteBtn.addEventListener('click', () => {
-        const noteText = noteInput.value.trim();
-        if (noteText) {
-            const costChange = parseCostUpdate(noteText);
-            if (costChange) {
-                addNote(noteText, true, costChange);
-            } else {
-                addNote(noteText);
+    if (addNoteBtn && noteInput) {
+        addNoteBtn.addEventListener('click', () => {
+            const noteText = noteInput.value.trim();
+            if (noteText) {
+                const costChange = parseCostUpdate(noteText);
+                if (costChange) {
+                    addNote(noteText, true, costChange);
+                } else {
+                    addNote(noteText);
+                }
             }
-        }
-    });
-
-    // Allow Enter key to add notes
-    noteInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            addNoteBtn.click();
-        }
-    });
-
-    loginForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        
-        // Show all sections
-        loginSection.style.display = 'none';
-        dashboardSection.style.display = 'block';
-        stagesSection.style.display = 'block';
-        timelineSection.style.display = 'block';
-        notesSection.style.display = 'block';
-        
-        // Initialize the tracker
-        createStagesList();
-        updateDashboard();
-        generateTimeline();
-        
-        // Add event listeners to newly created checkboxes
-        const stages = document.querySelectorAll('#stages-list input[type="checkbox"]');
-        stages.forEach(stage => {
-            stage.addEventListener('change', handleStageCompletion);
         });
-        
-        // Add welcome note
-        addNote(`Project tracker initialized for ${contractDetails.client} - ${contractDetails.address}`);
-    });
+
+        // Allow Enter key to add notes
+        noteInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                addNoteBtn.click();
+            }
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            
+            // Show all sections
+            if (loginSection) loginSection.style.display = 'none';
+            if (dashboardSection) dashboardSection.style.display = 'block';
+            if (stagesSection) stagesSection.style.display = 'block';
+            if (timelineSection) timelineSection.style.display = 'block';
+            if (notesSection) notesSection.style.display = 'block';
+            
+            // Initialize the tracker
+            createStagesList();
+            updateDashboard();
+            generateTimeline();
+            
+            // Add welcome note
+            addNote(`Project tracker initialized for ${contractDetails.client} - ${contractDetails.address}`);
+        });
+    }
 
     // Initialize dashboard on page load (hidden)
     updateDashboard();
