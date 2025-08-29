@@ -3,82 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Tracker</title>
+    <title>Pure Landscape Project Tracker</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
         <h1>Pure Landscape Project Tracker</h1>
+        <p>Contract Management System</p>
     </header>
-
     <main>
         <section id="login-section">
-            <h2>Log In</h2>
+            <h2>Project Access</h2>
             <form id="login-form">
                 <input type="email" id="email-login" placeholder="Email" required>
                 <input type="password" id="password-login" placeholder="Password" required>
-                <button type="submit">Log In</button>
+                <button type="submit">Access Project</button>
             </form>
-            <p>This is a conceptual feature. The data is not saved or secured.</p>
+            <div class="contract-info">
+                <h3>Contract Details</h3>
+                <p><strong>Client:</strong> Joe Chen</p>
+                <p><strong>Project:</strong> 20 Buckra Avenue, Turramurra NSW 2074</p>
+                <p><strong>Contractor:</strong> Pure Landscape and Carpentry Pty Ltd</p>
+                <p><strong>Contract Date:</strong> 22 August 2025</p>
+            </div>
+            <p class="disclaimer">This is a conceptual project tracker. Data is not permanently saved.</p>
         </section>
-
+        
         <section id="dashboard" style="display:none;">
             <h2>Project Dashboard</h2>
             <div class="summary">
-                <p>Total Project Cost: <span id="total-cost">A$226,546.48</span></p>
-                <p>Current Spend: <span id="current-spend">A$0.00</span></p>
-                <p>Remaining: <span id="remaining-cost">A$226,546.48</span></p>
+                <div class="summary-item">
+                    <h3>Total Project Cost</h3>
+                    <span id="total-cost">A$226,546.48</span>
+                </div>
+                <div class="summary-item">
+                    <h3>Current Spend</h3>
+                    <span id="current-spend">A$0.00</span>
+                </div>
+                <div class="summary-item">
+                    <h3>Remaining Budget</h3>
+                    <span id="remaining-cost">A$226,546.48</span>
+                </div>
             </div>
-
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="project-progress"></div>
+            <div class="progress-section">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="project-progress"></div>
+                </div>
+                <p id="progress-text">0% Complete</p>
+                <p id="completed-stages">0/6 Payment Stages Complete</p>
             </div>
-            <p id="progress-text">0% Complete</p>
         </section>
         
         <section id="stages-section" style="display:none;">
-            <h2>Project Stages</h2>
+            <h2>Payment Stages</h2>
+            <p class="section-description">Track progress through the 6 payment milestones defined in the contract</p>
             <ul id="stages-list">
-                <li>
-                    <label>
-                        <input type="checkbox" data-stage="Hardworks"> Hardworks
-                    </label>
-                </li>
-                <li>
-                    <label>
-                        <input type="checkbox" data-stage="Softworks"> Softworks
-                    </label>
-                </li>
-                <li>
-                    <label>
-                        <input type="checkbox" data-stage="Variations"> Variations
-                    </label>
-                </li>
-                <li>
-                    <label>
-                        <input type="checkbox" data-stage="Final Completion"> Final Completion
-                    </label>
-                </li>
+                <!-- Stages will be populated by JavaScript -->
             </ul>
         </section>
-
+        
         <section id="timeline-section" style="display:none;">
             <h2>Project Timeline</h2>
+            <p class="section-description">Chronological record of project milestones and payments</p>
             <div id="timeline"></div>
         </section>
-
+        
         <section id="notes-section" style="display:none;">
-            <h2>Notes & Cost Updates</h2>
+            <h2>Project Notes & Cost Updates</h2>
+            <p class="section-description">Add notes and track any additional costs or variations</p>
             <div id="notes-list"></div>
-            <textarea id="note-input" placeholder="Add a new note or cost update..."></textarea>
-            <button id="add-note-btn">Add Note</button>
+            <div class="note-input-section">
+                <textarea id="note-input" placeholder="Add a project note... 
+
+For cost updates, include 'Cost Update: A$amount' in your note to track additional expenses and variations."></textarea>
+                <button id="add-note-btn">Add Note</button>
+            </div>
         </section>
     </main>
-
+    
     <footer>
-        <p>Created with HTML, CSS, and JavaScript. For educational purposes only.</p>
+        <div class="footer-content">
+            <p><strong>Pure Landscape and Carpentry Pty Ltd</strong></p>
+            <p>ABN: 15603576209 | Licence: 314139C</p>
+            <p>Email: sean@purelandscapeandcarpentry.com.au</p>
+            <p class="disclaimer">Project tracker for contract management purposes</p>
+        </div>
     </footer>
-
+    
     <script src="script.js"></script>
 </body>
 </html>
